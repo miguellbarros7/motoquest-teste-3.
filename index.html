@@ -52,6 +52,13 @@ if (sharedRouteData) {
             content.appendChild(list);
 
     
+        } catch (error) {
+            console.error("Erro ao carregar rota partilhada:", error);
+            content.textContent = "Não foi possível carregar esta rota.";
+        }
+    });
+}
+
 </script>
     
     
