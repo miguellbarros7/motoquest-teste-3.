@@ -10070,8 +10070,10 @@ async function fetchFuelPricesByDistrict(district, fuel) {
 	    // MotoQuest: consultar primeiro a tabela semanal do GitHub.
     try {
         if (!window.mqWeeklyFuelPricesPromise) {
-            const weeklyUrl =
-                "https://miguellbarros7.github.io/motoquest/data/fuel-prices.json";
+          const weeklyUrl = new URL(
+    "./data/fuel-prices.json",
+    window.location.href
+).toString();
 
             window.mqWeeklyFuelPricesPromise = fetch(
                 weeklyUrl,
