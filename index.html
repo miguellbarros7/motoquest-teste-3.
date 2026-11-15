@@ -10337,25 +10337,21 @@ async function getFuelPricesForStations(stations, district) {
             stationId: record.station_id };
     };
 
-    return stations.map(station => {
-        // Um único posto oficial validado é a chave dos dois combustíveis.
-        // O segundo combustível só aparece se existir nesse mesmo posto.
-        const match95 = matchFuelStationPrice(station, records95);
-        const match98 = matchFuelStationPrice(station, records98);
-        const candidateIds = new Set([match95?.station_id, match98?.station_id]
-            .filter(id => id != null).map(String));
-        if (candidateIds.size > 1) {
-            return { ...station, fuelPrices: { gasoline95: null, gasoline98: null } };
+  
+return stations.map(station => {
+    // Procurar cada combustível de forma independente
+    const match95 = matchFuelStationPrice(station, records95);
+    const match98 = matchFuelStationPrice(station, records98);
+
+    return {
+        ...station,
+        fuelPrices: {
+            gasoline95: toPrice(match95, match95),
+            gasoline98: toPrice(match98, match98)
         }
-        const id = [...candidateIds][0];
-        return {
-            ...station,
-            fuelPrices: {
-                gasoline95: id ? toPrice(by95.get(id), match95 || match98) : null,
-                gasoline98: id ? toPrice(by98.get(id), match95 || match98) : null
-            }
-        };
-    });
+    };
+});
+
 }
 
 async function getFuelDistrict(latitude, longitude) {
