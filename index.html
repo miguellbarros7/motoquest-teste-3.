@@ -5592,22 +5592,10 @@ function updateRouteSummaryBike() {
     panel.append(title, details);
 }
 function loadMyBike() {
-    const key = myBikeStorageKey();
-    if (!key) return null;
-
-    try {
-        const data = JSON.parse(localStorage.getItem(key));
-        return data && typeof data === "object" ? data : null;
-    } catch {
-        return null;
-    }
-}
+    const bikePhotoCache = new Map();
 
 
-const bikePhotoCache = new Map();
-
-
- getBikePhoto(bike) {
+function getBikePhoto(bike) {
     return null;
 }
 
