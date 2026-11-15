@@ -12995,6 +12995,8 @@ routeInfo.insertBefore(tripWeatherPanel, savedFuelCard);
     const data = await response.json();
     const price = Number(data.price);
 
+ 
+try {
     if (
         data.fuel !== fuel ||
         !Number.isFinite(price) ||
@@ -13011,108 +13013,39 @@ routeInfo.insertBefore(tripWeatherPanel, savedFuelCard);
 
     const totalCost = litresNeeded * price;
 
-
-makeAdventureTile(
-    costLine, "💶", "CUSTO ESTIMADO",
-    euro(totalCost)
-);
-
+    makeAdventureTile(
+        costLine,
+        "💶",
+        "CUSTO ESTIMADO",
+        euro(totalCost)
+    );
 
     const consultedAt = data.consultedAt
         ? new Date(data.consultedAt)
         : null;
 
+    const dateText =
+        consultedAt && !Number.isNaN(consultedAt.getTime())
+            ? consultedAt.toLocaleString("pt-PT")
+            : "Data não disponível";
+
+    priceSource.textContent =
+        `Gasolina ${fuel}: ${euro(price)}/L · ` +
+        `Média dos postos consultados · ` +
+        `Fonte: PoupaLitro (dados DGEG) · ` +
+        `Consulta: ${dateText}`;
+
+} catch (error) {
+
+    console.warn("Preço da gasolina:", error);
+
+    costLine.textContent =
+        "💶 Custo: preço temporariamente indisponível";
 
     priceSource.textContent =
         "Não foi possível consultar a média nacional. " +
         "A distância e o consumo continuam disponíveis.";
-
-    } // Fecha o catch do preço
-
-} else {
-    const warning = document.createElement("p");
-    warning.textContent =
-        "⚠️ Confirma o consumo e a capacidade do depósito no Perfil.";
-    routeInfo.appendChild(warning);
 }
-
-} catch (err) {
-    console.error("Erro no resumo da rota:", err);
-    routeInfo.textContent = `⚠️ ${err.message}`;
-}
-
-};
-
-routeActionButtons.insertBefore(summaryBtn, arrow);
-
-card.append(actionsRow, description, summaryPanel);
-
-container.appendChild(card);
-
-});
-}
-
-
-    const target =
-        $(`${sectionName}Section`);
-
-    if (target) {
-        target.classList.add("active");
-    }
-
-    document
-        .querySelectorAll(".nav-btn")
-        .forEach(button => {
-            button.classList.toggle(
-                "active",
-                button.dataset.section === sectionName
-            );
-        });
-
-    if (sectionName === "locations") {
-        loadLocations();
-    }
-    
-
-if (sectionName === "routes") {
-    loadRouteLocations();
-    updateRouteSummaryBike();
-}
-
-
-
-    if (sectionName === "rewards") {
-        loadRewards();
-    }
-
-
-if (sectionName === "history") {
-    loadHistory();
-    loadMyRoutes();
-}
-
-if (sectionName === "profile") {
-    loadProfile();
-}
-
-
-if (sectionName === "admin") {
-
-
-        if (!isAdmin()) {
-            showSection("profile");
-            return;
-        }
-
-        loadAdminData();
-    }
-
-    window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-    });
-}
-
 
 /* =========================================================
    AUTH
