@@ -10151,13 +10151,16 @@ function matchFuelStationPrice(station, records) {
                 localityMatch: evidence.localityMatch
             };
         })
-        .filter(item =>
-            item.distance <= 80 &&
-            (
-                item.localityMatch ||
-                item.shared >= 2
-            )
-        )
+      
+.filter(item =>
+    item.distance <= 80 &&
+    (
+        item.distance <= 25 ||
+        item.localityMatch ||
+        item.shared >= 2
+    )
+)
+
         .sort((a, b) => a.distance - b.distance);
 
     if (!candidates.length) return null;
