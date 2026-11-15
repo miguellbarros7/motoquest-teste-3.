@@ -10273,6 +10273,52 @@ return distinctCandidates[0].record;
     return distinctCandidates[0].record;
 }
 
+	
+async function fetchFuelPricePage(fuel, page) {
+    const allowedFuels = [
+        "gasoline_95",
+        "gasoline_98"
+    ];
+
+    if (!allowedFuels.includes(fuel)) {
+        throw new Error("Tipo de combustível inválido: " + fuel);
+    }
+
+    const params = new URLSearchParams({
+        fuel: fuel,
+        limit: "100",
+        page: String(page)
+    });
+
+    const url =
+        "https://api.apiaberta.pt/v1/fuel/stations?" +
+        params.toString();
+
+    const response = await fetch(url, {
+        method: "GET",
+        headers: {
+            "Accept": "application/json"
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(
+            `API de combustíveis: HTTP ${response.status}`
+        );
+    }
+
+    const result = await response.json();
+
+    if (!result || !Array.isArray(result.data)) {
+        throw new Error(
+            "Resposta inválida da API de combustíveis"
+        );
+    }
+
+    return result;
+}
+
+
 async function fetchFuelPricesByDistrict(district, fuel) {
 
 	    // MotoQuest: consultar primeiro a tabela semanal do GitHub.
