@@ -10212,12 +10212,12 @@ function matchFuelStationPrice(station, records) {
         return null;
     }
 
+    
     return distinctCandidates[0].record;
-
-
-
+}
 
 async function fetchFuelPricesByDistrict(district, fuel) {
+
 	    // MotoQuest: consultar primeiro a tabela semanal do GitHub.
     try {
         if (!window.mqWeeklyFuelPricesPromise) {
