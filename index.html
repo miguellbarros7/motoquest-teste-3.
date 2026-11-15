@@ -10555,6 +10555,29 @@ async function getFuelPricesForStations(stations, district) {
             records98
         );
 
+		if (
+    String(station.name || "").toLowerCase().includes("bp") &&
+    String(station.locality || "").toLowerCase().includes("lapas")
+) {
+    console.log("DIAGNÓSTICO FINAL BP LAPAS", {
+        posto: station,
+        match95,
+        match98,
+        registos98: records98.length,
+        candidatos98: records98
+            .filter(record => fuelBrandCompatible(station, record))
+            .map(record => ({
+                id: record.station_id,
+                nome: record.name,
+                marca: record.brand,
+                localidade: record.locality,
+                preco: record.price_eur,
+                latitude: record.location?.lat,
+                longitude: record.location?.lng
+            }))
+    });
+}
+
         return {
             ...station,
             fuelPrices: {
