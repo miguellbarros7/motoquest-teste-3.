@@ -10043,26 +10043,109 @@ function fuelNameEvidence(station, record) {
 }
 
 
+
 function matchFuelStationPrice(station, records) {
+    if (!Array.isArray(records)) return null;
+
+    const validPrice = record =>
+        Number.isFinite(Number(record.price_eur)) &&
+        Number(record.price_eur) > 0;
+
+    // 1. Correspondência exata pelo identificador oficial
     const officialId = station.official_station_id;
 
-    if (officialId == null || !Array.isArray(records)) {
+    if (officialId != null) {
+        const exact = records
+            .filter(record =>
+                record.station_id != null &&
+                String(record.station_id) === String(officialId) &&
+                validPrice(record)
+            )
+            .sort((a, b) =>
+                new Date(b.updated_at || 0) -
+                new Date(a.updated_at || 0)
+            );
+
+        if (exact.length) return exact[0];
+    }
+
+    // 2. Correspondência geográfica
+    const lat = Number(station.latitude);
+    const lng = Number(station.longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         return null;
     }
 
-    const matches = records.filter(record =>
-        record.station_id != null &&
-        String(record.station_id) === String(officialId) &&
-        Number.isFinite(Number(record.price_eur)) &&
-        Number(record.price_eur) > 0
-    );
+    const normalize = value =>
+        String(value || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toUpperCase()
+            .trim();
 
-    if (matches.length === 0) return null;
+    const stationBrand = normalize(station.brand);
 
-    return matches.sort((a, b) =>
-        new Date(b.updated_at || 0) -
-        new Date(a.updated_at || 0)
-    )[0];
+    function distanceMeters(lat1, lon1, lat2, lon2) {
+        const rad = value => value * Math.PI / 180;
+        const dLat = rad(lat2 - lat1);
+        const dLng = rad(lon2 - lon1);
+
+        const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(rad(lat1)) *
+            Math.cos(rad(lat2)) *
+            Math.sin(dLng / 2) ** 2;
+
+        return 6371000 * 2 *
+            Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    const candidates = records
+        .filter(record => {
+            if (!validPrice(record)) return false;
+
+            const rLat = Number(record.location?.lat);
+            const rLng = Number(record.location?.lng);
+
+            if (!Number.isFinite(rLat) ||
+                !Number.isFinite(rLng)) return false;
+
+            const recordBrand = normalize(record.brand);
+
+            // Evitar marcas diferentes quando ambas são conhecidas
+            if (
+                stationBrand &&
+                recordBrand &&
+                stationBrand !== "GENERICO" &&
+                recordBrand !== "GENERICO" &&
+                stationBrand !== recordBrand
+            ) return false;
+
+            return true;
+        })
+        .map(record => ({
+            record,
+            distance: distanceMeters(
+                lat, lng,
+                Number(record.location.lat),
+                Number(record.location.lng)
+            )
+        }))
+        .filter(item => item.distance <= 80)
+        .sort((a, b) => a.distance - b.distance);
+
+    if (!candidates.length) return null;
+
+    // Não associar automaticamente se houver ambiguidade
+    if (
+        candidates.length > 1 &&
+        candidates[1].distance - candidates[0].distance < 15
+    ) {
+        return null;
+    }
+
+    return candidates[0].record;
 }
 
 
