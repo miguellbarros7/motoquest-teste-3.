@@ -13047,15 +13047,19 @@ makeAdventureTile(
 }
 
         
+  
     } else {
         const warning = document.createElement("p");
         warning.textContent =
             "⚠️ Confirma o consumo e a capacidade do depósito no Perfil.";
         routeInfo.appendChild(warning);
     }
-}
-    
+
 } catch (err) {
+    console.error("Erro no resumo da rota:", err);
+    routeInfo.textContent = `⚠️ ${err.message}`;
+}
+
     console.error("Erro no resumo da rota:", err);
     routeInfo.textContent = `⚠️ ${err.message}`;
 }
