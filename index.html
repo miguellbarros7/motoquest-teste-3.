@@ -10192,38 +10192,76 @@ function matchFuelStationPrice(station, records) {
 
     if (!distinctCandidates.length) return null;
 
-    // Não aceitar postos diferentes demasiado próximos
-    if (
-        distinctCandidates.length > 1 &&
-        distinctCandidates[1].distance -
-        distinctCandidates[0].distance < 15
-    ) {
-      console.warn(
-    "MotoQuest: associação ambígua - ANÁLISE COMPLETA",
-    {
-        postoMotoQuest: {
-            nome: station.name,
-            id: station.official_station_id,
-            latitude: station.latitude,
-            longitude: station.longitude,
-            morada: station.address,
-            localidade: station.locality
-        },
-        candidatos: distinctCandidates.map(item => ({
-            id: item.record.station_id,
-            nome: item.record.name,
-            marca: item.record.brand,
-            morada: item.record.address,
-            localidade: item.record.locality,
-            latitude: item.record.location?.lat,
-            longitude: item.record.location?.lng,
-            distanciaMetros: Math.round(item.distance)
-        }))
-    }
-);
+  
+// 3. Resolver ambiguidades quando os postos
+// representam a mesma localização comercial.
+
+if (distinctCandidates.length > 1) {
+    const first = distinctCandidates[0];
+
+    const closeCandidates = distinctCandidates.filter(item =>
+        item.distance - first.distance < 15
+    );
+
+    if (closeCandidates.length > 1) {
+
+        const normalize = value =>
+            String(value || "")
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, "");
+
+        const sameCommercialLocation = closeCandidates.every(item =>
+            normalize(item.record.brand) ===
+                normalize(first.record.brand) &&
+            normalize(item.record.address) ===
+                normalize(first.record.address) &&
+            normalize(item.record.locality) ===
+                normalize(first.record.locality)
+        );
+
+        const prices = closeCandidates.map(item =>
+            Math.round(Number(item.record.price_eur) * 1000)
+        );
+
+        const samePrice = prices.every(price =>
+            price === prices[0]
+        );
+
+        if (sameCommercialLocation && samePrice) {
+
+            const confirmed = [...closeCandidates].sort((a, b) =>
+                new Date(b.record.updated_at || 0) -
+                new Date(a.record.updated_at || 0)
+            )[0];
+
+            console.info(
+                "MotoQuest: preço confirmado por postos equivalentes",
+                {
+                    marca: first.record.brand,
+                    morada: first.record.address,
+                    localidade: first.record.locality,
+                    preco: first.record.price_eur,
+                    postos: closeCandidates.map(item =>
+                        item.record.station_id
+                    )
+                }
+            );
+
+            return confirmed.record;
+        }
+
+        console.warn(
+            "MotoQuest: associação ambígua não resolvida",
+            closeCandidates
+        );
 
         return null;
     }
+}
+
+return distinctCandidates[0].record;
 
     
     return distinctCandidates[0].record;
