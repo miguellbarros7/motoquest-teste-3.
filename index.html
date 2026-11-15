@@ -10212,14 +10212,20 @@ if (distinctCandidates.length > 1) {
                 .toLowerCase()
                 .replace(/[^a-z0-9]/g, "");
 
-        const sameCommercialLocation = closeCandidates.every(item =>
-            normalize(item.record.brand) ===
-                normalize(first.record.brand) &&
-            normalize(item.record.address) ===
-                normalize(first.record.address) &&
-            normalize(item.record.locality) ===
-                normalize(first.record.locality)
-        );
+      const sameCommercialLocation = closeCandidates.every(item =>
+    normalize(item.record.brand) !== "" &&
+    normalize(item.record.address) !== "" &&
+    normalize(item.record.locality) !== "" &&
+
+    normalize(item.record.brand) ===
+        normalize(first.record.brand) &&
+
+    normalize(item.record.address) ===
+        normalize(first.record.address) &&
+
+    normalize(item.record.locality) ===
+        normalize(first.record.locality)
+);
 
         const prices = closeCandidates.map(item =>
             Math.round(Number(item.record.price_eur) * 1000)
