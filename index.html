@@ -12969,74 +12969,32 @@ savedFuelCard.style.display =
 routeInfo.insertBefore(tripWeatherButton, savedFuelCard);
 routeInfo.insertBefore(tripWeatherPanel, savedFuelCard);
       
-try {
-    const fuel = bike.fuelType === "gasolina98" ? "98" : "95";
+try { // TRY EXTERIOR
 
-    const response = await fetch(
-        "https://gqimkzovrabptxqheedq.supabase.co/functions/v1/fuel-prices" +
-        "?fuel=" + fuel
-    );
+    if (litresNeeded > 0) {
 
-    if (!response.ok) {
-        throw new Error("Serviço de preços indisponível");
-    }
+        try { // CONSULTA DOS PREÇOS
 
-    const data = await response.json();
-    const price = Number(data.price);
+            // TODO: mantém aqui todo o teu código
+            // desde const fuel até priceSource.textContent
 
-    if (
-        data.fuel !== fuel ||
-        !Number.isFinite(price) ||
-        price <= 0
-    ) {
-        throw new Error("Preço inválido");
-    }
+        } catch (error) {
+            console.warn("Preço da gasolina:", error);
 
-    const euro = value =>
-        value.toLocaleString("pt-PT", {
-            style: "currency",
-            currency: "EUR"
-        });
+            costLine.textContent =
+                "💶 Custo: preço temporariamente indisponível";
 
-    const totalCost = litresNeeded * price;
-
-    makeAdventureTile(
-        costLine,
-        "💶",
-        "CUSTO ESTIMADO",
-        euro(totalCost)
-    );
-
-    const consultedAt = data.consultedAt
-        ? new Date(data.consultedAt)
-        : null;
-
-    const dateText =
-        consultedAt && !Number.isNaN(consultedAt.getTime())
-            ? consultedAt.toLocaleString("pt-PT")
-            : "Data não disponível";
-
-    priceSource.textContent =
-        `Gasolina ${fuel}: ${euro(price)}/L · ` +
-        `Média dos postos consultados · ` +
-        `Fonte: PoupaLitro (dados DGEG) · ` +
-        `Consulta: ${dateText}`;
-
-} catch (error) {
-    console.warn("Preço da gasolina:", error);
-
-    costLine.textContent =
-        "💶 Custo: preço temporariamente indisponível";
-
-    priceSource.textContent =
-        "Não foi possível consultar a média nacional. " +
-        "A distância e o consumo continuam disponíveis.";
-}
+            priceSource.textContent =
+                "Não foi possível consultar a média nacional. " +
+                "A distância e o consumo continuam disponíveis.";
+        }
 
     } else {
         const warning = document.createElement("p");
+
         warning.textContent =
             "⚠️ Confirma o consumo e a capacidade do depósito no Perfil.";
+
         routeInfo.appendChild(warning);
     }
 
