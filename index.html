@@ -10070,6 +10070,149 @@ function fuelNameEvidence(station, record) {
 }
 
 
+function matchFuelStationPrice(station, records) {
+    if (!Array.isArray(records)) return null;
+
+    const validPrice = record =>
+        Number.isFinite(Number(record.price_eur)) &&
+        Number(record.price_eur) > 0;
+
+    // 1. Correspondência pelo ID oficial
+    const officialId = station.official_station_id;
+
+    if (officialId != null) {
+        const exact = records
+            .filter(record =>
+                record.station_id != null &&
+                String(record.station_id) === String(officialId) &&
+                validPrice(record)
+            )
+            .sort((a, b) =>
+                new Date(b.updated_at || 0) -
+                new Date(a.updated_at || 0)
+            );
+
+        if (exact.length) return exact[0];
+    }
+
+    // 2. Validar coordenadas
+    const lat = Number(station.latitude);
+    const lng = Number(station.longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return null;
+    }
+
+    // 3. Procurar postos compatíveis
+    const candidates = records
+        .filter(record => {
+            if (!validPrice(record)) return false;
+
+            if (!fuelBrandCompatible(station, record)) {
+                return false;
+            }
+
+            const rLat = Number(record.location?.lat);
+            const rLng = Number(record.location?.lng);
+
+            return Number.isFinite(rLat) &&
+                Number.isFinite(rLng);
+        })
+        .map(record => {
+            const evidence = fuelNameEvidence(station, record);
+
+            const distance = fuelStationDistanceMeters(
+                lat,
+                lng,
+                Number(record.location.lat),
+                Number(record.location.lng)
+            );
+
+            return {
+                record,
+                distance,
+                shared: evidence.shared,
+                localityMatch: evidence.localityMatch
+            };
+        })
+        .filter(item =>
+            item.distance <= 80 &&
+            (
+                item.distance <= 25 ||
+                item.localityMatch ||
+                item.shared >= 2
+            )
+        )
+        .sort((a, b) => a.distance - b.distance);
+
+    if (!candidates.length) return null;
+
+    // 4. Eliminar duplicados pelo ID
+    const unique = new Map();
+
+    candidates.forEach((item, index) => {
+        const id = item.record.station_id != null
+            ? String(item.record.station_id)
+            : `sem-id-${index}`;
+
+        const existing = unique.get(id);
+
+        if (
+            !existing ||
+            item.distance < existing.distance
+        ) {
+            unique.set(id, item);
+        }
+    });
+
+    const distinct = [...unique.values()]
+        .sort((a, b) => a.distance - b.distance);
+
+    if (!distinct.length) return null;
+
+    // 5. Rejeitar ambiguidades comerciais próximas
+    if (distinct.length > 1) {
+        const first = distinct[0];
+
+        const close = distinct.filter(item =>
+            item.distance - first.distance < 15
+        );
+
+        if (close.length > 1) {
+            const normalize = value =>
+                normalizeFuelText(value).replace(/\s/g, "");
+
+            const sameLocation = close.every(item =>
+                normalize(item.record.brand) ===
+                    normalize(first.record.brand) &&
+                normalize(item.record.address) ===
+                    normalize(first.record.address) &&
+                normalize(item.record.locality) ===
+                    normalize(first.record.locality)
+            );
+
+            const prices = close.map(item =>
+                Math.round(Number(item.record.price_eur) * 1000)
+            );
+
+            const samePrice = prices.every(price =>
+                price === prices[0]
+            );
+
+            if (!sameLocation || !samePrice) {
+                console.warn(
+                    "MotoQuest: correspondência ambígua rejeitada",
+                    close
+                );
+
+                return null;
+            }
+        }
+    }
+
+    // 6. Devolver o posto confirmado
+    return distinct[0].record;
+}
 
 
 const toPrice = (record) => {
