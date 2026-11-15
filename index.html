@@ -10297,22 +10297,27 @@ async function fetchFuelPricePage(fuel, page) {
 }
 
 
+
 async function fetchFuelPricesByDistrict(district, fuel) {
 
-	    // MotoQuest: consultar primeiro a tabela semanal do GitHub.
+    // 1. Primeiro, carregar a tabela semanal.
+    let weeklyRecords = [];
+
     try {
         if (!window.mqWeeklyFuelPricesPromise) {
-          const weeklyUrl = new URL(
-    "./data/fuel-prices.json",
-    window.location.href
-).toString();
+
+            const weeklyUrl = new URL(
+                "./data/fuel-prices.json",
+                window.location.href
+            ).toString();
 
             window.mqWeeklyFuelPricesPromise = fetch(
                 weeklyUrl,
                 { cache: "no-cache" }
             ).then(async response => {
+
                 if (!response.ok) {
-                    throw new Error("Tabela semanal indisponivel");
+                    throw new Error("Tabela semanal indisponível");
                 }
 
                 const table = await response.json();
@@ -10322,10 +10327,11 @@ async function fetchFuelPricesByDistrict(district, fuel) {
                     !Array.isArray(table.fuels.gasoline_95) ||
                     !Array.isArray(table.fuels.gasoline_98)
                 ) {
-                    throw new Error("Tabela semanal invalida");
+                    throw new Error("Tabela semanal inválida");
                 }
 
                 return table;
+
             }).catch(error => {
                 window.mqWeeklyFuelPricesPromise = null;
                 throw error;
@@ -10335,31 +10341,20 @@ async function fetchFuelPricesByDistrict(district, fuel) {
         const weeklyTable =
             await window.mqWeeklyFuelPricesPromise;
 
-        const weeklyRecords = weeklyTable.fuels[fuel];
+        weeklyRecords = weeklyTable.fuels[fuel] || [];
 
-      if (
-    Array.isArray(weeklyRecords) &&
-    weeklyRecords.length > 0
-) {
-    return weeklyRecords;
-}
+        console.info(
+            `MotoQuest — ${fuel}: ${weeklyRecords.length} registos semanais`
+        );
 
-if (
-    Array.isArray(weeklyRecords) &&
-    weeklyRecords.length === 0
-) {
-    console.warn(
-        `MotoQuest: sem dados semanais para ${fuel}. A consultar API alternativa.`
-    );
-}
     } catch (error) {
         console.warn(
-            "MotoQuest: a usar consulta alternativa de precos:",
+            "MotoQuest: tabela semanal indisponível:",
             error
         );
     }
 
-
+    // 2. Verificar cache.
     const key = `PORTUGAL|${fuel}`;
     const now = Date.now();
     const cached = fuelPriceCache.get(key);
@@ -10372,81 +10367,140 @@ if (
         return fuelPriceRequests.get(key);
     }
 
+    // 3. Consultar a API alternativa.
     const request = (async () => {
-        const first = await fetchFuelPricePage(fuel, 1);
-        const records = [...first.data];
-        const totalPages = Math.max(
-            1,
-            Math.min(200, Number(first.meta?.pages) || 1)
-        );
 
-        const pages = [];
-
-        for (let page = 2; page <= totalPages; page++) {
-            pages.push(page);
-        }
-
+        let apiRecords = [];
         let failedPages = 0;
+        let apiFailed = false;
 
-        // Três pedidos simultâneos para não sobrecarregar a API.
-        const workers = Array.from(
-            { length: Math.min(3, pages.length) },
-            async () => {
-                while (pages.length > 0) {
-                    const page = pages.shift();
+        try {
 
-                    try {
-                        const result =
-                            await fetchFuelPricePage(fuel, page);
+            const first = await fetchFuelPricePage(fuel, 1);
 
-                        records.push(...result.data);
-                    } catch (error) {
-                        failedPages++;
-                        console.warn(
-                            `MotoQuest — falhou página ${page} de ${fuel}:`,
-                            error
-                        );
+            apiRecords.push(...first.data);
+
+            const totalPages = Math.max(
+                1,
+                Math.min(200, Number(first.meta?.pages) || 1)
+            );
+
+            const pages = [];
+
+            for (let page = 2; page <= totalPages; page++) {
+                pages.push(page);
+            }
+
+            const workers = Array.from(
+                { length: Math.min(3, pages.length) },
+                async () => {
+
+                    while (pages.length > 0) {
+
+                        const page = pages.shift();
+
+                        try {
+                            const result =
+                                await fetchFuelPricePage(fuel, page);
+
+                            apiRecords.push(...result.data);
+
+                        } catch (error) {
+                            failedPages++;
+
+                            console.warn(
+                                `MotoQuest — falhou página ${page} de ${fuel}:`,
+                                error
+                            );
+                        }
                     }
                 }
+            );
+
+            await Promise.all(workers);
+
+        } catch (error) {
+
+            apiFailed = true;
+
+            console.warn(
+                `MotoQuest — API alternativa indisponível para ${fuel}:`,
+                error
+            );
+        }
+
+        // 4. Juntar tabela semanal e API.
+        // A tabela semanal tem prioridade quando o ID coincide.
+
+        const merged = new Map();
+
+        weeklyRecords.forEach((record, index) => {
+
+            const id = record.station_id != null
+                ? String(record.station_id)
+                : `semanal-${index}`;
+
+            merged.set(id, record);
+        });
+
+        apiRecords.forEach((record, index) => {
+
+            const id = record.station_id != null
+                ? String(record.station_id)
+                : `api-${index}`;
+
+            if (!merged.has(id)) {
+                merged.set(id, record);
             }
-        );
+        });
 
-        await Promise.all(workers);
+        const records = [...merged.values()];
 
-        // Dados completos: 30 minutos.
-        // Dados parciais: tentar completar após 2 minutos.
+        // 5. Guardar cache.
         fuelPriceCache.set(key, {
             time: Date.now(),
-            ttl: failedPages === 0
-                ? 30 * 60 * 1000
-                : 2 * 60 * 1000,
+            ttl: apiFailed || failedPages > 0
+                ? 2 * 60 * 1000
+                : 30 * 60 * 1000,
             data: records
         });
 
         console.info(
-            `MotoQuest — ${fuel}: ${records.length} registos; ` +
-            `${failedPages} páginas falhadas`
+            `MotoQuest — ${fuel}:`,
+            {
+                semanais: weeklyRecords.length,
+                api: apiRecords.length,
+                total: records.length,
+                paginasFalhadas: failedPages,
+                apiIndisponivel: apiFailed
+            }
         );
 
         return records;
+
     })();
 
     fuelPriceRequests.set(key, request);
 
     try {
         return await request;
+
     } catch (error) {
+
         console.warn(
-            `MotoQuest — falha na consulta de ${fuel}:`,
+            `MotoQuest — erro ao consultar ${fuel}:`,
             error
         );
 
-        // Se houver dados anteriores, aproveitá-los.
-        return cached?.data || [];
+        return weeklyRecords.length
+            ? weeklyRecords
+            : cached?.data || [];
+
     } finally {
         fuelPriceRequests.delete(key);
     }
 }
+
 
 async function getFuelPricesForStations(stations, district) {
     if (!Array.isArray(stations)) return [];
