@@ -10198,16 +10198,29 @@ function matchFuelStationPrice(station, records) {
         distinctCandidates[1].distance -
         distinctCandidates[0].distance < 15
     ) {
-        console.warn(
-            "MotoQuest: associação ambígua",
-            station.name,
-            distinctCandidates.map(item => ({
-                station_id: item.record.station_id,
-                nome: item.record.name,
-                distancia: Math.round(item.distance),
-                localidade: item.record.locality
-            }))
-        );
+      console.warn(
+    "MotoQuest: associação ambígua - ANÁLISE COMPLETA",
+    {
+        postoMotoQuest: {
+            nome: station.name,
+            id: station.official_station_id,
+            latitude: station.latitude,
+            longitude: station.longitude,
+            morada: station.address,
+            localidade: station.locality
+        },
+        candidatos: distinctCandidates.map(item => ({
+            id: item.record.station_id,
+            nome: item.record.name,
+            marca: item.record.brand,
+            morada: item.record.address,
+            localidade: item.record.locality,
+            latitude: item.record.location?.lat,
+            longitude: item.record.location?.lng,
+            distanciaMetros: Math.round(item.distance)
+        }))
+    }
+);
 
         return null;
     }
