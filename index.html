@@ -12996,7 +12996,24 @@ routeInfo.insertBefore(tripWeatherPanel, savedFuelCard);
     const price = Number(data.price);
 
  
+
+  
+
 try {
+    const fuel = bike.fuelType === "gasolina98" ? "98" : "95";
+
+    const response = await fetch(
+        "https://gqimkzovrabptxqheedq.supabase.co/functions/v1/fuel-prices" +
+        "?fuel=" + fuel
+    );
+
+    if (!response.ok) {
+        throw new Error("Serviço de preços indisponível");
+    }
+
+    const data = await response.json();
+    const price = Number(data.price);
+
     if (
         data.fuel !== fuel ||
         !Number.isFinite(price) ||
@@ -13036,7 +13053,6 @@ try {
         `Consulta: ${dateText}`;
 
 } catch (error) {
-
     console.warn("Preço da gasolina:", error);
 
     costLine.textContent =
@@ -13046,6 +13062,7 @@ try {
         "Não foi possível consultar a média nacional. " +
         "A distância e o consumo continuam disponíveis.";
 }
+
 
 /* =========================================================
    AUTH
