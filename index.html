@@ -10313,9 +10313,21 @@ async function fetchFuelPricesByDistrict(district, fuel) {
 
         const weeklyRecords = weeklyTable.fuels[fuel];
 
-        if (Array.isArray(weeklyRecords)) {
-            return weeklyRecords;
-        }
+      if (
+    Array.isArray(weeklyRecords) &&
+    weeklyRecords.length > 0
+) {
+    return weeklyRecords;
+}
+
+if (
+    Array.isArray(weeklyRecords) &&
+    weeklyRecords.length === 0
+) {
+    console.warn(
+        `MotoQuest: sem dados semanais para ${fuel}. A consultar API alternativa.`
+    );
+}
     } catch (error) {
         console.warn(
             "MotoQuest: a usar consulta alternativa de precos:",
