@@ -10554,6 +10554,11 @@ async function getFuelPricesForStations(stations, district) {
             station,
             records98
         );
+		console.log("MOTOQUEST TESTE GASOLINA 98", {
+    nome: station.name,
+    localidade: station.locality,
+    match98: match98
+});
 
 		if (
     String(station.name || "").toLowerCase().includes("bp") &&
