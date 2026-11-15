@@ -5607,7 +5607,7 @@ function loadMyBike() {
 const bikePhotoCache = new Map();
 
 
-async function getBikePhoto(bike) {
+ getBikePhoto(bike) {
     return null;
 }
 
@@ -13051,7 +13051,13 @@ try {
             "⚠️ Confirma o consumo e a capacidade do depósito no Perfil.";
         routeInfo.appendChild(warning);
     }
+
+} catch (err) {
+    console.error("Erro no resumo da rota:", err);
+    routeInfo.textContent = `⚠️ ${err.message}`;
 }
+
+};
 
 /* =========================================================
    AUTH
