@@ -10407,8 +10407,8 @@ async function fetchFuelPricesByDistrict(district, fuel) {
                         const result =
                             await fetchFuelPricePage(fuel, page);
 
-records.push(...result.data);
-                        success = true;
+apiRecords.push(...result.data);
+						success = true;
                         break;
 
                     } catch (error) {
@@ -10448,7 +10448,6 @@ records.push(...result.data);
             }
 
 
-            await Promise.all(workers);
 
         } catch (error) {
 
