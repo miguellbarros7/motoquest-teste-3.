@@ -10391,31 +10391,63 @@ async function fetchFuelPricesByDistrict(district, fuel) {
                 pages.push(page);
             }
 
-            const workers = Array.from(
-                { length: Math.min(3, pages.length) },
-                async () => {
 
-                    while (pages.length > 0) {
+            // Pedidos sequenciais para evitar HTTP 429.
+            const wait = ms =>
+                new Promise(resolve => setTimeout(resolve, ms));
 
-                        const page = pages.shift();
+            for (const page of pages) {
 
-                        try {
-                            const result =
-                                await fetchFuelPricePage(fuel, page);
+                let success = false;
 
-                            apiRecords.push(...result.data);
+                for (let attempt = 1; attempt <= 4; attempt++) {
 
-                        } catch (error) {
+                    try {
+
+                        const result =
+                            await fetchFuelPricePage(fuel, page);
+
+                        apiRecords.push(...result.data);
+
+                        success = true;
+                        break;
+
+                    } catch (error) {
+
+                        const is429 =
+                            String(error.message).includes("429");
+
+                        if (is429 && attempt < 4) {
+
+                            const delay = 3000 * attempt;
+
+                            console.warn(
+                                `MotoQuest — limite da API na página ${page}. ` +
+                                `Nova tentativa em ${delay / 1000}s.`
+                            );
+
+                            await wait(delay);
+
+                        } else {
+
                             failedPages++;
 
                             console.warn(
                                 `MotoQuest — falhou página ${page} de ${fuel}:`,
                                 error
                             );
+
+                            break;
                         }
                     }
                 }
-            );
+
+                // Pequena pausa entre pedidos.
+                if (success) {
+                    await wait(1200);
+                }
+            }
+
 
             await Promise.all(workers);
 
