@@ -9997,8 +9997,11 @@ function fuelStationDistanceMeters(lat1, lon1, lat2, lon2) {
     );
 }
 
-// Associar preços apenas quando o posto é identificado inequivocamente.
-// Nunca associar por marca ou proximidade isoladamente.
+
+// ======================================================
+// MOTOQUEST — ASSOCIAÇÃO SEGURA DOS PREÇOS
+// ======================================================
+
 function normalizeFuelText(value) {
     return String(value || "")
         .normalize("NFD")
@@ -10010,39 +10013,61 @@ function normalizeFuelText(value) {
 
 function meaningfulFuelTokens(value) {
     const ignored = new Set([
-        "POSTO", "POSTOS", "COMBUSTIVEL", "COMBUSTIVEIS", "ABASTECIMENTO",
-        "PA", "DE", "DA", "DO", "DOS", "DAS", "A", "O", "LDA", "SA",
-        "UNIPESSOAL", "ESTACAO", "SERVICO", "AUTO", "GASOLINA", "GASOLEO"
+        "POSTO", "POSTOS", "COMBUSTIVEL",
+        "COMBUSTIVEIS", "ABASTECIMENTO",
+        "PA", "DE", "DA", "DO", "DOS", "DAS",
+        "A", "O", "LDA", "SA", "UNIPESSOAL",
+        "ESTACAO", "SERVICO", "AUTO",
+        "GASOLINA", "GASOLEO"
     ]);
-    return normalizeFuelText(value).split(" ").filter(
-        token => token.length > 1 && !ignored.has(token)
-    );
+
+    return normalizeFuelText(value)
+        .split(" ")
+        .filter(token =>
+            token.length > 1 && !ignored.has(token)
+        );
 }
 
 function fuelBrandCompatible(station, record) {
     const a = normalizeFuelBrand(station.brand);
     const b = normalizeFuelBrand(record.brand);
-    // A fonte pode identificar o posto como "Genérico" embora a bomba
-    // tenha marca própria. Esse caso exige evidência geográfica e nominal.
-    return !a || !b || a === b || b === "GENERICO" || a === "GENERICO";
+
+    return !a || !b || a === b ||
+        b === "GENERICO" || a === "GENERICO";
 }
 
 function fuelNameEvidence(station, record) {
-    const stationNames = [station.name, station.brand];
-    const recordNames = [record.name, record.brand];
-    const a = new Set(stationNames.flatMap(meaningfulFuelTokens));
-    const b = new Set(recordNames.flatMap(meaningfulFuelTokens));
-    const recordLocality = normalizeFuelText(record.locality);
-    const stationLocality = normalizeFuelText(station.locality);
-    const localityMatch = Boolean(stationLocality && recordLocality && (
-        stationLocality === recordLocality ||
-        stationLocality.includes(recordLocality) ||
-        recordLocality.includes(stationLocality)
-    ));
-    return { shared: [...a].filter(token => b.has(token)).length, localityMatch };
+    const a = new Set(
+        [station.name, station.brand]
+            .flatMap(meaningfulFuelTokens)
+    );
+
+    const b = new Set(
+        [record.name, record.brand]
+            .flatMap(meaningfulFuelTokens)
+    );
+
+    const recordLocality =
+        normalizeFuelText(record.locality);
+
+    const stationLocality =
+        normalizeFuelText(station.locality);
+
+    const localityMatch = Boolean(
+        stationLocality &&
+        recordLocality &&
+        (
+            stationLocality === recordLocality ||
+            stationLocality.includes(recordLocality) ||
+            recordLocality.includes(stationLocality)
+        )
+    );
+
+    return {
+        shared: [...a].filter(token => b.has(token)).length,
+        localityMatch
+    };
 }
-
-
 
 function matchFuelStationPrice(station, records) {
     if (!Array.isArray(records)) return null;
@@ -10051,7 +10076,7 @@ function matchFuelStationPrice(station, records) {
         Number.isFinite(Number(record.price_eur)) &&
         Number(record.price_eur) > 0;
 
-    // 1. Correspondência exata pelo identificador oficial
+    // 1. Correspondência exata pelo ID oficial
     const officialId = station.official_station_id;
 
     if (officialId != null) {
@@ -10069,22 +10094,16 @@ function matchFuelStationPrice(station, records) {
         if (exact.length) return exact[0];
     }
 
-    // 2. Correspondência geográfica
+    // 2. Validar coordenadas
     const lat = Number(station.latitude);
     const lng = Number(station.longitude);
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return null;
-    }
-
-    const normalize = value =>
-        String(value || "")
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .toUpperCase()
-            .trim();
-
-    const stationBrand = normalize(station.brand);
+    if (
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng) ||
+        Math.abs(lat) > 90 ||
+        Math.abs(lng) > 180
+    ) return null;
 
     function distanceMeters(lat1, lon1, lat2, lon2) {
         const rad = value => value * Math.PI / 180;
@@ -10101,6 +10120,7 @@ function matchFuelStationPrice(station, records) {
             Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
+    // 3. Procurar correspondências com evidência
     const candidates = records
         .filter(record => {
             if (!validPrice(record)) return false;
@@ -10108,41 +10128,81 @@ function matchFuelStationPrice(station, records) {
             const rLat = Number(record.location?.lat);
             const rLng = Number(record.location?.lng);
 
-            if (!Number.isFinite(rLat) ||
-                !Number.isFinite(rLng)) return false;
-
-            const recordBrand = normalize(record.brand);
-
-            // Evitar marcas diferentes quando ambas são conhecidas
             if (
-                stationBrand &&
-                recordBrand &&
-                stationBrand !== "GENERICO" &&
-                recordBrand !== "GENERICO" &&
-                stationBrand !== recordBrand
+                !Number.isFinite(rLat) ||
+                !Number.isFinite(rLng) ||
+                Math.abs(rLat) > 90 ||
+                Math.abs(rLng) > 180
+            ) return false;
+
+            if (!fuelBrandCompatible(station, record)) {
+                return false;
+            }
+
+            const evidence =
+                fuelNameEvidence(station, record);
+
+            if (evidence.shared < 1) return false;
+
+            if (
+                station.locality &&
+                record.locality &&
+                !evidence.localityMatch
             ) return false;
 
             return true;
         })
-        .map(record => ({
-            record,
-            distance: distanceMeters(
-                lat, lng,
-                Number(record.location.lat),
-                Number(record.location.lng)
-            )
-        }))
+        .map(record => {
+            const evidence =
+                fuelNameEvidence(station, record);
+
+            return {
+                record,
+                distance: distanceMeters(
+                    lat,
+                    lng,
+                    Number(record.location.lat),
+                    Number(record.location.lng)
+                ),
+                shared: evidence.shared,
+                localityMatch: evidence.localityMatch
+            };
+        })
         .filter(item => item.distance <= 80)
-        .sort((a, b) => a.distance - b.distance);
+        .sort((a, b) => {
+            if (b.shared !== a.shared) {
+                return b.shared - a.shared;
+            }
+
+            if (b.localityMatch !== a.localityMatch) {
+                return Number(b.localityMatch) -
+                    Number(a.localityMatch);
+            }
+
+            return a.distance - b.distance;
+        });
 
     if (!candidates.length) return null;
 
-    // Não associar automaticamente se houver ambiguidade
-    if (
-        candidates.length > 1 &&
-        candidates[1].distance - candidates[0].distance < 15
-    ) {
-        return null;
+    // 4. Não aceitar candidatos ambíguos
+    if (candidates.length > 1) {
+        const first = candidates[0];
+        const second = candidates[1];
+
+        if (
+            String(first.record.station_id) !==
+                String(second.record.station_id) &&
+            first.shared === second.shared &&
+            first.localityMatch === second.localityMatch &&
+            Math.abs(first.distance - second.distance) < 15
+        ) {
+            console.warn(
+                "MotoQuest: associação ambígua",
+                station.name
+            );
+
+            return null;
+        }
     }
 
     return candidates[0].record;
