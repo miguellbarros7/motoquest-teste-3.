@@ -10032,8 +10032,8 @@ function fuelBrandCompatible(station, record) {
     const a = normalizeFuelBrand(station.brand);
     const b = normalizeFuelBrand(record.brand);
 
-    return !a || !b || a === b ||
-        b === "GENERICO" || a === "GENERICO";
+    // Não aceitar marcas desconhecidas ou genéricas.
+    return Boolean(a && b && a === b);
 }
 
 function fuelNameEvidence(station, record) {
@@ -10070,6 +10070,7 @@ function fuelNameEvidence(station, record) {
 }
 
 
+
 function matchFuelStationPrice(station, records) {
     if (!Array.isArray(records)) return null;
 
@@ -10077,9 +10078,9 @@ function matchFuelStationPrice(station, records) {
         Number.isFinite(Number(record.price_eur)) &&
         Number(record.price_eur) > 0;
 
+    // 1. Correspondência exata pelo ID oficial
     const officialId = station.official_station_id;
 
-    // 1. Correspondência exata pelo ID
     if (officialId != null) {
         const exact = records
             .filter(record =>
@@ -10095,7 +10096,7 @@ function matchFuelStationPrice(station, records) {
         if (exact.length) return exact[0];
     }
 
-    // 2. Correspondência por GPS
+    // 2. Validar coordenadas do posto
     const lat = Number(station.latitude);
     const lng = Number(station.longitude);
 
@@ -10118,21 +10119,20 @@ function matchFuelStationPrice(station, records) {
             Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
+    // 3. Procurar candidatos com evidência real
     const candidates = records
         .filter(record => {
             if (!validPrice(record)) return false;
-
-            const rLat = Number(record.location?.lat);
-            const rLng = Number(record.location?.lng);
-
-            if (!Number.isFinite(rLat) ||
-                !Number.isFinite(rLng)) return false;
 
             if (!fuelBrandCompatible(station, record)) {
                 return false;
             }
 
-            return true;
+            const rLat = Number(record.location?.lat);
+            const rLng = Number(record.location?.lng);
+
+            return Number.isFinite(rLat) &&
+                Number.isFinite(rLng);
         })
         .map(record => {
             const evidence = fuelNameEvidence(station, record);
@@ -10155,16 +10155,14 @@ function matchFuelStationPrice(station, records) {
             item.distance <= 80 &&
             (
                 item.localityMatch ||
-                item.shared >= 2 ||
-                item.distance <= 25
+                item.shared >= 2
             )
         )
         .sort((a, b) => a.distance - b.distance);
 
     if (!candidates.length) return null;
 
-  
-    // 3. Agrupar registos duplicados do mesmo posto
+    // 4. Eliminar duplicados do mesmo posto
     const uniqueCandidates = new Map();
 
     candidates.forEach((item, index) => {
@@ -10192,88 +10190,68 @@ function matchFuelStationPrice(station, records) {
 
     if (!distinctCandidates.length) return null;
 
-  
-// 3. Resolver ambiguidades quando os postos
-// representam a mesma localização comercial.
+    // 5. Resolver possíveis duplicados comerciais
+    if (distinctCandidates.length > 1) {
+        const first = distinctCandidates[0];
 
-if (distinctCandidates.length > 1) {
-    const first = distinctCandidates[0];
-
-    const closeCandidates = distinctCandidates.filter(item =>
-        item.distance - first.distance < 15
-    );
-
-    if (closeCandidates.length > 1) {
-
-        const normalize = value =>
-            String(value || "")
-                .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "")
-                .toLowerCase()
-                .replace(/[^a-z0-9]/g, "");
-
-      const sameCommercialLocation = closeCandidates.every(item =>
-    normalize(item.record.brand) !== "" &&
-    normalize(item.record.address) !== "" &&
-    normalize(item.record.locality) !== "" &&
-
-    normalize(item.record.brand) ===
-        normalize(first.record.brand) &&
-
-    normalize(item.record.address) ===
-        normalize(first.record.address) &&
-
-    normalize(item.record.locality) ===
-        normalize(first.record.locality)
-);
-
-        const prices = closeCandidates.map(item =>
-            Math.round(Number(item.record.price_eur) * 1000)
+        const closeCandidates = distinctCandidates.filter(item =>
+            item.distance - first.distance < 15
         );
 
-        const samePrice = prices.every(price =>
-            price === prices[0]
-        );
+        if (closeCandidates.length > 1) {
+            const normalize = value =>
+                String(value || "")
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]/g, "");
 
-        if (sameCommercialLocation && samePrice) {
+            const sameCommercialLocation =
+                closeCandidates.every(item =>
+                    normalize(item.record.brand) !== "" &&
+                    normalize(item.record.address) !== "" &&
+                    normalize(item.record.locality) !== "" &&
+
+                    normalize(item.record.brand) ===
+                        normalize(first.record.brand) &&
+
+                    normalize(item.record.address) ===
+                        normalize(first.record.address) &&
+
+                    normalize(item.record.locality) ===
+                        normalize(first.record.locality)
+                );
+
+            const prices = closeCandidates.map(item =>
+                Math.round(Number(item.record.price_eur) * 1000)
+            );
+
+            const samePrice = prices.every(price =>
+                price === prices[0]
+            );
+
+            if (!sameCommercialLocation || !samePrice) {
+                console.warn(
+                    "MotoQuest: correspondência ambígua rejeitada",
+                    closeCandidates
+                );
+
+                return null;
+            }
 
             const confirmed = [...closeCandidates].sort((a, b) =>
                 new Date(b.record.updated_at || 0) -
                 new Date(a.record.updated_at || 0)
             )[0];
 
-            console.info(
-                "MotoQuest: preço confirmado por postos equivalentes",
-                {
-                    marca: first.record.brand,
-                    morada: first.record.address,
-                    localidade: first.record.locality,
-                    preco: first.record.price_eur,
-                    postos: closeCandidates.map(item =>
-                        item.record.station_id
-                    )
-                }
-            );
-
             return confirmed.record;
         }
-
-        console.warn(
-            "MotoQuest: associação ambígua não resolvida",
-            closeCandidates
-        );
-
-        return null;
     }
-}
 
-return distinctCandidates[0].record;
-
-    
+    // 6. Devolver o candidato mais próximo confirmado
     return distinctCandidates[0].record;
 }
 
-	
 async function fetchFuelPricePage(fuel, page) {
     const allowedFuels = [
         "gasoline_95",
