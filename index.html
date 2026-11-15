@@ -10376,141 +10376,56 @@ async function fetchFuelPricesByDistrict(district, fuel) {
             const wait = ms =>
                 new Promise(resolve => setTimeout(resolve, ms));
 
-            for (const page of pages) {
+          
+let stopPagination = false;
 
-                let success = false;
+for (const page of pages) {
+    let success = false;
 
-                for (let attempt = 1; attempt <= 4; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            const result = await fetchFuelPricePage(fuel, page);
 
-                    try {
-
-                        const result =
-                            await fetchFuelPricePage(fuel, page);
-
-apiRecords.push(...result.data);
-						success = true;
-                        break;
-
-                    } catch (error) {
-
-                        const is429 =
-                            String(error.message).includes("429");
-
-                        if (is429 && attempt < 4) {
-
-                            const delay = 3000 * attempt;
-
-                            console.warn(
-                                `MotoQuest — limite da API na página ${page}. ` +
-                                `Nova tentativa em ${delay / 1000}s.`
-                            );
-
-                            await wait(delay);
-
-                        } else {
-
-                            failedPages++;
-
-                            console.warn(
-                                `MotoQuest — falhou página ${page} de ${fuel}:`,
-                                error
-                            );
-
-                            break;
-                        }
-                    }
-                }
-
-                // Pequena pausa entre pedidos.
-                if (success) {
-                    await wait(1200);
-                }
-            }
-
-
+            apiRecords.push(...result.data);
+            success = true;
+            break;
 
         } catch (error) {
+            const is429 = String(error.message).includes("429");
 
-            apiFailed = true;
+            if (is429) {
+                failedPages++;
+                stopPagination = true;
 
-            console.warn(
-                `MotoQuest — API alternativa indisponível para ${fuel}:`,
-                error
-            );
+                console.warn(
+                    `MotoQuest — limite HTTP 429 na página ${page}. ` +
+                    "A interromper paginação e a preservar os dados disponíveis."
+                );
+
+                break;
+            }
+
+            if (attempt < 2) {
+                await wait(2000);
+            } else {
+                failedPages++;
+
+                console.warn(
+                    `MotoQuest — falhou página ${page} de ${fuel}:`,
+                    error
+                );
+            }
         }
+    }
 
-        // 4. Juntar tabela semanal e API.
-        // A tabela semanal tem prioridade quando o ID coincide.
+    if (stopPagination) {
+        break;
+    }
 
-        const merged = new Map();
-
-        weeklyRecords.forEach((record, index) => {
-
-            const id = record.station_id != null
-                ? String(record.station_id)
-                : `semanal-${index}`;
-
-            merged.set(id, record);
-        });
-
-        apiRecords.forEach((record, index) => {
-
-            const id = record.station_id != null
-                ? String(record.station_id)
-                : `api-${index}`;
-
-            if (!merged.has(id)) {
-                merged.set(id, record);
-            }
-        });
-
-        const records = [...merged.values()];
-
-        // 5. Guardar cache.
-        fuelPriceCache.set(key, {
-            time: Date.now(),
-            ttl: apiFailed || failedPages > 0
-                ? 2 * 60 * 1000
-                : 30 * 60 * 1000,
-            data: records
-        });
-
-        console.info(
-            `MotoQuest — ${fuel}:`,
-            {
-                semanais: weeklyRecords.length,
-                api: apiRecords.length,
-                total: records.length,
-                paginasFalhadas: failedPages,
-                apiIndisponivel: apiFailed
-            }
-        );
-
-        return records;
-
-    })();
-
-    fuelPriceRequests.set(key, request);
-
-    try {
-        return await request;
-
-    } catch (error) {
-
-        console.warn(
-            `MotoQuest — erro ao consultar ${fuel}:`,
-            error
-        );
-
-        return weeklyRecords.length
-            ? weeklyRecords
-            : cached?.data || [];
-
-    } finally {
-        fuelPriceRequests.delete(key);
+    if (success) {
+        await wait(1200);
     }
 }
-
 
 
 
