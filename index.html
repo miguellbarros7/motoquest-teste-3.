@@ -13022,73 +13022,36 @@ makeAdventureTile(
         ? new Date(data.consultedAt)
         : null;
 
-    const dateText =
-        consultedAt && !Number.isNaN(consultedAt.getTime())
-            ? consultedAt.toLocaleString("pt-PT")
-            : "Data não disponível";
-
-    priceSource.textContent =
-        `Gasolina ${fuel}: ${euro(price)}/L · ` +
-        `Média dos postos consultados · ` +
-        `Fonte: PoupaLitro (dados DGEG) · ` +
-        `Consulta: ${dateText}`;
-
-} catch (error) {
-
-
-    console.warn("Preço da gasolina:", error);
-
-    costLine.textContent =
-        "💶 Custo: preço temporariamente indisponível";
 
     priceSource.textContent =
         "Não foi possível consultar a média nacional. " +
         "A distância e o consumo continuam disponíveis.";
 
+    } // Fecha o catch do preço
 
-        
-  
-     else {
-        const warning = document.createElement("p");
-        warning.textContent =
-            "⚠️ Confirma o consumo e a capacidade do depósito no Perfil.";
-        routeInfo.appendChild(warning);
-    }
+} else {
+    const warning = document.createElement("p");
+    warning.textContent =
+        "⚠️ Confirma o consumo e a capacidade do depósito no Perfil.";
+    routeInfo.appendChild(warning);
+}
 
 } catch (err) {
     console.error("Erro no resumo da rota:", err);
     routeInfo.textContent = `⚠️ ${err.message}`;
 }
 
-    console.error("Erro no resumo da rota:", err);
-    routeInfo.textContent = `⚠️ ${err.message}`;
-}
-
 };
-
 
 routeActionButtons.insertBefore(summaryBtn, arrow);
 
-        
-
-
-
-
 card.append(actionsRow, description, summaryPanel);
 
+container.appendChild(card);
 
-        container.appendChild(card);
-
-    });
+});
 }
 
-function showSection(sectionName) {
-
-    document
-        .querySelectorAll(".section")
-        .forEach(section => {
-            section.classList.remove("active");
-        });
 
     const target =
         $(`${sectionName}Section`);
