@@ -10437,6 +10437,44 @@ return stations.map(station => {
     const match95 = matchFuelStationPrice(station, records95);
     const match98 = matchFuelStationPrice(station, records98);
 
+	if (
+    String(station.name || "").toLowerCase().includes("bp") &&
+    String(station.locality || "").toLowerCase().includes("lapas")
+) {
+    console.log("🔎 DIAGNÓSTICO BP LAPAS", {
+        posto: station,
+        gasolina95: match95,
+        gasolina98: match98,
+        registos98: records98
+            .map(record => {
+                const lat = Number(record.location?.lat);
+                const lng = Number(record.location?.lng);
+
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                    return null;
+                }
+
+                const distance = Math.hypot(
+                    (lat - Number(station.latitude)) * 111320,
+                    (lng - Number(station.longitude)) *
+                    111320 *
+                    Math.cos(Number(station.latitude) * Math.PI / 180)
+                );
+
+                return {
+                    id: record.station_id,
+                    nome: record.name,
+                    marca: record.brand,
+                    morada: record.address,
+                    localidade: record.locality,
+                    preco: record.price_eur,
+                    distancia: Math.round(distance)
+                };
+            })
+            .filter(item => item && item.distancia <= 1000)
+    });
+}
+
     return {
         ...station,
         fuelPrices: {
