@@ -10163,20 +10163,57 @@ function matchFuelStationPrice(station, records) {
 
     if (!candidates.length) return null;
 
-    // 3. Evitar associações ambíguas
+  
+    // 3. Agrupar registos duplicados do mesmo posto
+    const uniqueCandidates = new Map();
+
+    candidates.forEach((item, index) => {
+        const id = item.record.station_id != null
+            ? String(item.record.station_id)
+            : `sem-id-${index}`;
+
+        const existing = uniqueCandidates.get(id);
+
+        if (
+            !existing ||
+            item.distance < existing.distance ||
+            (
+                item.distance === existing.distance &&
+                new Date(item.record.updated_at || 0) >
+                new Date(existing.record.updated_at || 0)
+            )
+        ) {
+            uniqueCandidates.set(id, item);
+        }
+    });
+
+    const distinctCandidates = [...uniqueCandidates.values()]
+        .sort((a, b) => a.distance - b.distance);
+
+    if (!distinctCandidates.length) return null;
+
+    // Não aceitar postos diferentes demasiado próximos
     if (
-        candidates.length > 1 &&
-        candidates[1].distance - candidates[0].distance < 15
+        distinctCandidates.length > 1 &&
+        distinctCandidates[1].distance -
+        distinctCandidates[0].distance < 15
     ) {
         console.warn(
             "MotoQuest: associação ambígua",
-            station.name
+            station.name,
+            distinctCandidates.map(item => ({
+                station_id: item.record.station_id,
+                nome: item.record.name,
+                distancia: Math.round(item.distance),
+                localidade: item.record.locality
+            }))
         );
+
         return null;
     }
 
-    return candidates[0].record;
-}
+    return distinctCandidates[0].record;
+
 
 
 
